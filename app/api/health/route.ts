@@ -2,7 +2,7 @@
  * Health Check API Route - GET /api/health
  *
  * This endpoint checks the health of all services:
- * - Embedding model (local)
+ * - HuggingFace Embedding API
  * - Pinecone (vector database)
  * - Neo4j (graph database)
  * - LLM service (HuggingFace or OpenAI)
@@ -11,12 +11,14 @@
  * {
  *   "status": "healthy" | "degraded" | "unhealthy",
  *   "services": {
- *     "embedding_model": true/false,
+ *     "embedding_service": true/false,
  *     "pinecone": true/false,
  *     "neo4j": true/false,
  *     "llm": true/false,
  *     "llm_provider": "huggingface" | "openai"
- *   }
+ *   },
+ *   "timestamp": "ISO date string",
+ *   "version": "1.0.0"
  * }
  */
 

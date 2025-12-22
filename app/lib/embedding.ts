@@ -1,21 +1,24 @@
 /**
- * Embedding Service - Handles text-to-vector conversion using HuggingFace Transformers
- * This service uses the BAAI/bge-large-en-v1.5 model to generate 1024-dimensional embeddings
- * Runs in-browser using WebAssembly for efficient client-side processing
+ * HuggingFace Embedding Service - Production-ready text-to-vector conversion
+ * This service uses HuggingFace Inference API with the BAAI/bge-large-en-v1.5 model
+ * Compatible with Vercel and other serverless environments
  */
 
-import { pipeline, FeatureExtractionPipeline } from "@xenova/transformers";
+import { HfInference } from "@huggingface/inference";
 
 /**
- * EmbeddingService class that manages the embedding model lifecycle
- * Implements singleton pattern to avoid loading the model multiple times
+ * HuggingFace Embedding Service class
+ * Implements singleton pattern for efficient API usage
  */
-class EmbeddingService {
-  private static instance: EmbeddingService;
-  private pipeline: FeatureExtractionPipeline | null = null;
-  private cache: Map<string, number[]> = new Map(); // Cache for previously computed embeddings
-  private isInitializing: boolean = false;
-  private initPromise: Promise<void> | null = null;
+class HuggingFaceEmbeddingService {
+  private static instance: HuggingFaceEmbeddingService;
+  private hf: HfInference | null = null;
+  private cache: Map<string, number[]> = new Map();
+  private isInitialized: boolean = false;
+
+  // Model configuration
+  private readonly modelId = "BAAI/bge-large-en-v1.5";
+  private readonly maxCacheSize = 100;
 
   /**
    * Private constructor to enforce singleton pattern
@@ -23,69 +26,45 @@ class EmbeddingService {
   private constructor() {}
 
   /**
-   * Get the singleton instance of EmbeddingService
-   * @returns The singleton EmbeddingService instance
+   * Get the singleton instance
+   * @returns The singleton HuggingFaceEmbeddingService instance
    */
-  public static getInstance(): EmbeddingService {
-    if (!EmbeddingService.instance) {
-      EmbeddingService.instance = new EmbeddingService();
+  public static getInstance(): HuggingFaceEmbeddingService {
+    if (!HuggingFaceEmbeddingService.instance) {
+      HuggingFaceEmbeddingService.instance = new HuggingFaceEmbeddingService();
     }
-    return EmbeddingService.instance;
+    return HuggingFaceEmbeddingService.instance;
   }
 
   /**
-   * Initialize the embedding model
-   * This is an async operation that downloads and loads the model
-   * Subsequent calls will wait for the first initialization to complete
+   * Initialize the HuggingFace client
+   * Must be called before using the service
    */
   public async initialize(): Promise<void> {
-    // If already initialized, return immediately
-    if (this.pipeline) {
+    if (this.isInitialized) {
       return;
     }
 
-    // If currently initializing, wait for that to complete
-    if (this.isInitializing && this.initPromise) {
-      return this.initPromise;
-    }
-
-    // Start initialization
-    this.isInitializing = true;
-    this.initPromise = this._doInitialize();
-
-    try {
-      await this.initPromise;
-    } finally {
-      this.isInitializing = false;
-      this.initPromise = null;
-    }
-  }
-
-  /**
-   * Internal method to perform the actual initialization
-   * Downloads and loads the BAAI/bge-large-en-v1.5 model
-   */
-  private async _doInitialize(): Promise<void> {
-    try {
-      console.log("Loading embedding model: BAAI/bge-large-en-v1.5...");
-
-      // Create a feature extraction pipeline with the BGE model
-      // This model produces 1024-dimensional embeddings
-      this.pipeline = await pipeline(
-        "feature-extraction",
-        "Xenova/bge-large-en-v1.5"
+    const apiKey = process.env.HUGGINGFACE_API_KEY;
+    if (!apiKey) {
+      throw new Error(
+        "HUGGINGFACE_API_KEY not found in environment variables"
       );
+    }
 
-      console.log("✓ Embedding model loaded successfully");
+    try {
+      this.hf = new HfInference(apiKey);
+      this.isInitialized = true;
+      console.log("✓ HuggingFace Embedding Service initialized");
     } catch (error) {
-      console.error("Failed to load embedding model:", error);
-      throw new Error("Failed to initialize embedding model");
+      console.error("Failed to initialize HuggingFace client:", error);
+      throw new Error("Failed to initialize HuggingFace embedding service");
     }
   }
 
   /**
    * Generate an embedding vector for the given text
-   * Uses caching to avoid recomputing embeddings for the same text
+   * Uses caching to avoid redundant API calls
    *
    * @param text - The input text to embed
    * @returns Promise<number[]> - The embedding vector (1024 dimensions)
@@ -93,83 +72,157 @@ class EmbeddingService {
   public async embed(text: string): Promise<number[]> {
     // Check cache first
     if (this.cache.has(text)) {
+      console.log(`Cache hit for text: "${text.substring(0, 50)}..."`);
       return this.cache.get(text)!;
     }
 
-    // Ensure model is initialized
-    if (!this.pipeline) {
+    // Ensure service is initialized
+    if (!this.isInitialized || !this.hf) {
       await this.initialize();
     }
 
-    if (!this.pipeline) {
-      throw new Error("Embedding model not initialized");
+    if (!this.hf) {
+      throw new Error("HuggingFace client not initialized");
     }
 
     try {
-      // Generate embedding using the pipeline
-      // The model outputs a tensor, we need to extract the array
-      const output = await this.pipeline(text, {
-        pooling: "mean", // Use mean pooling for sentence embeddings
-        normalize: true, // Normalize the output vector
+      console.log(`Generating embedding for: "${text.substring(0, 50)}..."`);
+      
+      // Call HuggingFace Inference API for feature extraction
+      const response = await this.hf.featureExtraction({
+        model: this.modelId,
+        inputs: text,
       });
 
-      // Convert tensor to array
-      const embedding = Array.from(output.data) as number[];
+      // Convert response to number array
+      let embedding: number[];
+      
+      if (Array.isArray(response)) {
+        // If response is already a flat array
+        if (typeof response[0] === 'number') {
+          embedding = response as number[];
+        } else {
+          // If response is nested array (batch), take the first element
+          embedding = (response as number[][])[0];
+        }
+      } else {
+        throw new Error("Unexpected response format from HuggingFace API");
+      }
+
+      // Validate embedding dimensions
+      if (embedding.length !== 1024) {
+        throw new Error(
+          `Expected 1024 dimensions, got ${embedding.length} dimensions`
+        );
+      }
 
       // Cache the result
       this.cache.set(text, embedding);
 
-      // Limit cache size to prevent memory issues
-      if (this.cache.size > 100) {
-        // Remove oldest entry
-        const firstKey = this.cache.keys().next().value;
-        if (firstKey) {
-          this.cache.delete(firstKey);
-        }
-      }
+      // Manage cache size
+      this.manageCacheSize();
 
+      console.log(`✓ Generated ${embedding.length}D embedding`);
       return embedding;
     } catch (error) {
-      console.error("Error generating embedding:", error);
-      throw new Error("Failed to generate embedding");
+      console.error("Error generating embedding via HuggingFace:", error);
+      
+      // Provide more specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes("401")) {
+          throw new Error("HuggingFace API authentication failed. Check your HUGGINGFACE_API_KEY.");
+        } else if (error.message.includes("429")) {
+          throw new Error("HuggingFace API rate limit exceeded. Please try again later.");
+        } else if (error.message.includes("model")) {
+          throw new Error(`HuggingFace model ${this.modelId} not available or loading.`);
+        }
+      }
+      
+      throw new Error(`Failed to generate embedding: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   /**
    * Batch embed multiple texts efficiently
+   * Processes texts individually but with optimized caching
+   * 
    * @param texts - Array of texts to embed
    * @returns Promise<number[][]> - Array of embedding vectors
    */
   public async embedBatch(texts: string[]): Promise<number[][]> {
     const embeddings: number[][] = [];
-
-    for (const text of texts) {
-      const embedding = await this.embed(text);
-      embeddings.push(embedding);
+    
+    console.log(`Processing batch of ${texts.length} texts`);
+    
+    // Process each text (HF Inference API is more efficient with individual calls)
+    for (let i = 0; i < texts.length; i++) {
+      const text = texts[i];
+      try {
+        const embedding = await this.embed(text);
+        embeddings.push(embedding);
+        
+        // Add small delay to avoid overwhelming the API
+        if (i < texts.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      } catch (error) {
+        console.error(`Failed to embed text ${i + 1}/${texts.length}:`, error);
+        throw error;
+      }
     }
 
+    console.log(`✓ Successfully processed batch of ${embeddings.length} embeddings`);
     return embeddings;
   }
 
   /**
+   * Manage cache size to prevent memory issues
+   * Removes oldest entries when cache exceeds limit
+   */
+  private manageCacheSize(): void {
+    while (this.cache.size > this.maxCacheSize) {
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey) {
+        this.cache.delete(firstKey);
+      }
+    }
+  }
+
+  /**
    * Clear the embedding cache
-   * Useful for freeing memory when needed
+   * Useful for freeing memory
    */
   public clearCache(): void {
     this.cache.clear();
+    console.log("Embedding cache cleared");
   }
 
   /**
    * Get cache statistics
-   * @returns Object with cache size information
+   * @returns Object with cache information
    */
-  public getCacheStats(): { size: number; maxSize: number } {
+  public getCacheStats(): { size: number; maxSize: number; hitRate?: number } {
     return {
       size: this.cache.size,
-      maxSize: 100,
+      maxSize: this.maxCacheSize,
     };
+  }
+
+  /**
+   * Test the service with a simple embedding generation
+   * Useful for health checks
+   */
+  public async testService(): Promise<boolean> {
+    try {
+      await this.initialize();
+      const testEmbedding = await this.embed("test");
+      return testEmbedding.length === 1024;
+    } catch (error) {
+      console.error("Embedding service test failed:", error);
+      return false;
+    }
   }
 }
 
 // Export singleton instance
-export const embeddingService = EmbeddingService.getInstance();
+export const embeddingService = HuggingFaceEmbeddingService.getInstance();
