@@ -6,6 +6,7 @@
  * - Message input
  * - Connection status
  * - Error handling
+ * - Minimize functionality
  *
  * This component manages the chat state and communication with the API
  */
@@ -17,13 +18,13 @@ import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { ChatAPI } from "@/app/lib/api";
 import type { Message } from "@/app/lib/types";
-import { AlertCircle, Wifi, WifiOff, X } from "lucide-react";
+import { AlertCircle, Wifi, WifiOff, Minimize2, X } from "lucide-react";
 import { cn } from "@/app/lib/utils";
 
 /**
  * ChatBot component - main chat interface
  */
-export function ChatBot() {
+export function ChatBot({ onMinimize }: { onMinimize?: () => void }) {
   // State management
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -122,7 +123,7 @@ export function ChatBot() {
 
   return (
     <div className="flex flex-col h-full bg-card overflow-hidden">
-      {/* Header with title and connection status */}
+      {/* Header with title, connection status, and minimize button */}
       <div className="bg-primary text-primary-foreground p-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div>
@@ -132,29 +133,42 @@ export function ChatBot() {
             <p className="text-sm opacity-90">Powered by Bolds Innovation</p>
           </div>
 
-          {/* Connection status indicator */}
-          {isConnected !== null && (
-            <div
-              className={cn(
-                "flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium",
-                isConnected
-                  ? "bg-green-500/20 text-green-600 dark:text-green-400"
-                  : "bg-destructive/20 text-destructive"
-              )}
-            >
-              {isConnected ? (
-                <>
-                  <Wifi className="h-3 w-3" />
-                  <span>Connected</span>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="h-3 w-3" />
-                  <span>Disconnected</span>
-                </>
-              )}
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {/* Connection status indicator */}
+            {isConnected !== null && (
+              <div
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium",
+                  isConnected
+                    ? "bg-green-500/20 text-green-600 dark:text-green-400"
+                    : "bg-destructive/20 text-destructive"
+                )}
+              >
+                {isConnected ? (
+                  <>
+                    <Wifi className="h-3 w-3" />
+                    <span>Connected</span>
+                  </>
+                ) : (
+                  <>
+                    <WifiOff className="h-3 w-3" />
+                    <span>Disconnected</span>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Minimize button */}
+            {onMinimize && (
+              <button
+                onClick={onMinimize}
+                className="p-2 rounded-md hover:bg-primary-foreground/10 transition-colors"
+                aria-label="Minimize chat"
+              >
+                <Minimize2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

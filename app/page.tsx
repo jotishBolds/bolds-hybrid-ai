@@ -1,7 +1,7 @@
 /**
  * Home Page Component
  *
- * Main landing page with clean design
+ * Main landing page with full-screen chat interface and centered branding
  */
 
 "use client";
@@ -13,7 +13,7 @@ import { FloatingChatBubble } from "./components/FloatingChatBubble";
  */
 export default function Home() {
   return (
-    <main className="min-h-screen bg-background flex items-center justify-center">
+    <main className="min-h-screen bg-background flex items-center justify-center relative">
       {/* Centered Text */}
       <div className="text-center px-4">
         <h1 className="text-6xl sm:text-7xl md:text-8xl lg:text-9xl font-thin text-foreground">
@@ -21,7 +21,7 @@ export default function Home() {
         </h1>
       </div>
 
-      {/* Floating Chat Bubble - positioned at bottom center */}
+      {/* Full-screen chat interface */}
       <FloatingChatBubble />
     </main>
   );
